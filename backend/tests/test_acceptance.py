@@ -15,11 +15,14 @@ from unittest.mock import patch
 import cv2
 import imageio_ffmpeg
 from fastapi.testclient import TestClient
+from fastapi import HTTPException, UploadFile
 from PIL import Image
 
-from backend.config import ROOT
+from backend.config import MAX_VIDEO_BYTES, ROOT
 from backend.database import store
 from backend.main import app
+from backend.routers.detection import detect_video
+from backend.schemas import InferenceOptions
 from backend.services import video
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -108,6 +111,98 @@ class AcceptanceTests(unittest.TestCase):
         finally:
             capture.release()
         self.assertEqual(self.client.get("/api/history", params={"source": "video", "q": key}).json()["count"], 1)
+
+    def test_video_resolution_matrix_real_inference_and_h264_export(self):
+        sizes = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160),
+                 (2160, 3840), (3000, 1000), (1000, 3000), (641, 431), (3000, 3000)]
+        original_annotate = video.annotate
+        rendered_sizes = []
+
+        def checked_annotate(image, rows):
+            for row in rows:
+                self.assertIn(row['kelas'], {'EmptyChair', 'OccupiedChair'})
+                self.assertTrue(0 <= row['x1'] < row['x2'] <= image.width)
+                self.assertTrue(0 <= row['y1'] < row['y2'] <= image.height)
+            result = original_annotate(image, rows)
+            self.assertEqual(result.size, image.size)
+            rendered_sizes.append(image.size)
+            return result
+
+        for i, (width, height) in enumerate(sizes):
+            with self.subTest(size=(width, height)):
+                clip = self.data / f'resolution-{i}.mp4'
+                subprocess.run([
+                    imageio_ffmpeg.get_ffmpeg_exe(), '-loglevel', 'error', '-y', '-loop', '1',
+                    '-i', str(FIXTURE), '-vf',
+                    f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2',
+                    '-t', '1', '-r', '2', '-pix_fmt', 'yuv444p', '-c:v', 'libx264', '-threads', '1', str(clip),
+                ], check=True)
+                with patch.object(video, 'annotate', side_effect=checked_annotate):
+                    response = self.client.post('/api/detect/video', files={'file': (clip.name, clip.read_bytes())},
+                                                data={'sample_every': 2, 'device': 'auto' if i % 2 else 'cpu',
+                                                      'resolution': 480, 'confidence': 0.3})
+                    self.assertEqual(response.status_code, 202, response.text)
+                    key = response.json()['id']
+                    deadline = time.monotonic() + 60
+                    while time.monotonic() < deadline:
+                        job = self.client.get(f'/api/jobs/{key}').json()
+                        if job['status'] in {'completed', 'error'}:
+                            break
+                        time.sleep(0.1)
+                self.assertEqual(job['status'], 'completed', job.get('error'))
+                target = video.processing_size(width, height)
+                self.assertEqual(rendered_sizes[-1], target)
+                self.assertEqual((job['metadata']['width'], job['metadata']['height']), (width, height))
+                self.assertEqual(job['metadata']['resized'], target != (width, height))
+                self.assertEqual(job['sample_every'], 2)
+                self.assertEqual(job['duration'], 1)
+                self.assertEqual(len(job['frames']), 1)
+                self.assertEqual(job['frames'][0]['playback_seconds'], 0)
+                summary = job['frames'][0]
+                self.assertEqual(summary['total'], summary['empty'] + summary['occupied'])
+                download = self.client.get(f'/api/jobs/{key}/video')
+                self.assertEqual(download.status_code, 200)
+                output = self.data / f'output-{i}.mp4'
+                output.write_bytes(download.content)
+                capture = cv2.VideoCapture(str(output))
+                try:
+                    self.assertTrue(capture.read()[0])
+                    self.assertEqual(capture.get(cv2.CAP_PROP_FRAME_WIDTH), target[0] + target[0] % 2)
+                    self.assertEqual(capture.get(cv2.CAP_PROP_FRAME_HEIGHT), target[1] + target[1] % 2)
+                    self.assertEqual(capture.get(cv2.CAP_PROP_FPS), 1)
+                    self.assertEqual(capture.get(cv2.CAP_PROP_FRAME_COUNT), 1)
+                finally:
+                    capture.release()
+                history = self.client.get('/api/history', params={'source': 'video', 'q': key}).json()
+                self.assertEqual(history['count'], 1)
+                detail = self.client.get(f"/api/history/{history['items'][0]['id']}").json()
+                self.assertEqual(detail['details']['video_metadata'], job['metadata'])
+                export = self.client.get('/api/history/export', params={'source': 'video', 'q': key})
+                self.assertEqual(len(list(csv.DictReader(io.StringIO(export.content.decode('utf-8-sig'))))), 1)
+                self.assertFalse(any((self.data / 'jobs').glob(f'{key}.input.*')))
+
+    def test_video_rejects_oversize_long_and_corrupt_files_and_cleans_uploads(self):
+        # Exercise the real 150 MB limit from disk, without building a huge multipart body in memory.
+        with (self.data / 'large.mp4').open('w+b') as source:
+            source.write(b'\0\0\0\x18ftyp')
+            source.truncate(MAX_VIDEO_BYTES + 1)
+            source.seek(0)
+            with self.assertRaises(HTTPException) as rejected:
+                detect_video(UploadFile(filename='large.mp4', file=source), InferenceOptions(), 10)
+        self.assertEqual(rejected.exception.status_code, 413)
+        corrupt = self.client.post('/api/detect/video', files={'file': ('broken.mp4', b'\0\0\0\x18ftyp' + b'x' * 33)})
+        self.assertEqual(corrupt.status_code, 422)
+        unsupported = self.client.post('/api/detect/video', files={'file': ('clip.webm', b'unsupported')})
+        self.assertEqual(unsupported.status_code, 422)
+        clip = self.data / 'long.mp4'
+        subprocess.run([
+            imageio_ffmpeg.get_ffmpeg_exe(), '-loglevel', 'error', '-y', '-f', 'lavfi',
+            '-i', 'color=size=16x16:rate=1', '-t', '601', '-c:v', 'libx264', str(clip),
+        ], check=True)
+        too_long = self.client.post('/api/detect/video', files={'file': (clip.name, clip.read_bytes())})
+        self.assertEqual(too_long.status_code, 422)
+        self.assertIn('10 menit', too_long.json()['detail'])
+        self.assertFalse(any((self.data / 'jobs').glob('*.input.*')))
 
     def test_websocket_multiple_frames_update_student_then_go_offline(self):
         initial = self.client.get("/api/occupancy").json()

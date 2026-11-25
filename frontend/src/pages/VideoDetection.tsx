@@ -1,4 +1,4 @@
-import { Download, Film, ScanLine } from 'lucide-react'
+import { Download, Film, Info, ScanLine } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { FileDrop, InferenceFields, useMediaUrl } from '../components/Detection'
@@ -6,7 +6,7 @@ import { Metrics } from '../components/Occupancy'
 import { Button, Empty, ErrorBox, Field, PageTitle, Panel, Spinner, useToast } from '../components/ui'
 import { useData } from '../hooks/useData'
 import { api, download, endpoint, upload } from '../services/api'
-import type { Job } from '../types'
+import type { Job, VideoMetadata } from '../types'
 import { defaults, elapsed, stamp } from '../utils'
 
 const jobFinished = (job: Job) => job.status === 'completed' || job.status === 'error'
@@ -20,6 +20,7 @@ export function VideoDetection() {
   const [originalError, setOriginalError] = useState(false)
   const [error, setError] = useState('')
   const [seconds, setSeconds] = useState(0)
+  const [previewMetadata, setPreviewMetadata] = useState<VideoMetadata | null>(null)
   const original = useMediaUrl(file)
   const toast = useToast()
   const { data: job, error: jobError, refresh } = useData<Job>(id ? '/api/jobs/' + id : null, 900, jobFinished)
@@ -27,6 +28,10 @@ export function VideoDetection() {
   const busy = uploading || Boolean(id && !jobError && (!job || ['queued', 'processing'].includes(job.status)))
   const output = complete ? endpoint('/api/jobs/' + id + '/video') : ''
   const frame = complete ? job.frames.findLast(item => item.playback_seconds <= seconds + 0.01) || job.frames[0] : job?.latest
+  const metadata = job?.metadata || previewMetadata
+  const metadataError = metadata && (metadata.duration_seconds > 600 ? 'Durasi video maksimal 10 menit.' :
+    metadata.width * metadata.height > 4096 * 4096 || Math.max(metadata.width, metadata.height) > 8192 ?
+      'Resolusi video melebihi batas keamanan: maksimal 16.777.216 piksel per frame dan 8.192 piksel per sisi.' : '')
 
   useEffect(() => {
     if (!complete) return
@@ -38,11 +43,21 @@ export function VideoDetection() {
       setError('Pilih video MP4, AVI, atau MOV dengan ukuran hingga 150 MB.')
       return
     }
-    setFile(next); setId(''); setSeconds(0); setOriginalError(false); setError('')
+    setFile(next); setId(''); setSeconds(0); setOriginalError(false); setPreviewMetadata(null); setError('')
+  }
+
+  function readMetadata(video: HTMLVideoElement) {
+    const { videoWidth: width, videoHeight: height, duration } = video
+    if (!width || !height || !Number.isFinite(duration) || duration <= 0) return
+    const scale = Math.min(1, (width >= height ? 1920 : 1080) / width, (width >= height ? 1080 : 1920) / height)
+    const processing_width = Math.max(1, Math.floor(width * scale))
+    const processing_height = Math.max(1, Math.floor(height * scale))
+    setPreviewMetadata({ width, height, duration_seconds: duration, processing_width, processing_height,
+      resized: width !== processing_width || height !== processing_height })
   }
 
   async function process() {
-    if (!file) return
+    if (!file || metadataError) return
     setUploading(true); setId(''); setSeconds(0); setError('')
     try {
       const data = await api<{ id: string }>('/api/detect/video', upload(file, options, { sample_every: sampling }))
@@ -54,14 +69,26 @@ export function VideoDetection() {
   const chart = job?.frames.map(row => ({ ...row, occupancy: row.occupancy == null ? null : row.occupancy * 100 })) ?? []
   return <>
     <PageTitle title="Deteksi Video" description="Analisis perubahan ketersediaan kursi dari frame video." />
-    {(error || jobError || job?.error) && <ErrorBox message={error || jobError || job?.error || ''} retry={jobError ? refresh : undefined} />}
+    {(error || metadataError || jobError || job?.error) && <ErrorBox message={error || metadataError || jobError || job?.error || ''} retry={jobError ? refresh : undefined} />}
     <div className="workspace-grid">
-      <Panel title="Video masukan"><FileDrop kind="video" file={file} choose={choose} disabled={busy} /></Panel>
+      <Panel title="Video masukan"><FileDrop kind="video" file={file} choose={choose} disabled={busy} />
+        <div className="video-resize-info" role="status">
+          <p><Info size={18} aria-hidden="true" /><strong>Penyesuaian resolusi otomatis</strong></p>
+          <p>Video beresolusi tinggi akan disesuaikan secara otomatis untuk mengoptimalkan proses deteksi tanpa mengubah rasio aspek video.</p>
+          {metadata && <div className="info-lines">
+            <div><span>Resolusi asli</span><strong>{metadata.width} × {metadata.height} px</strong></div>
+            <div><span>Resolusi pemrosesan</span><strong>{metadata.processing_width} × {metadata.processing_height} px</strong></div>
+            <div><span>Durasi video</span><strong>{stamp(metadata.duration_seconds)}</strong></div>
+            <div><span>Ukuran file</span><strong>{((file?.size || 0) / (1024 * 1024)).toLocaleString('id-ID', { maximumFractionDigits: 2 })} MB</strong></div>
+            <div><span>Status penyesuaian resolusi</span><strong>{metadata.resized ? 'Resolusi disesuaikan secara otomatis.' : 'Resolusi video sudah optimal. Penyesuaian tidak diperlukan.'}</strong></div>
+          </div>}
+        </div>
+      </Panel>
       <Panel title="Pengaturan video"><InferenceFields options={options} set={setOptions} disabled={busy} />
         <Field label="Interval sampling"><select value={sampling} onChange={e => setSampling(Number(e.target.value))} disabled={busy}>
           {[1, 5, 10, 15, 30, 60, 120].map(value => <option key={value} value={value}>Setiap {value} frame</option>)}
         </select></Field>
-        <Button type="button" className="panel-action stretch" onClick={process} disabled={!file || busy}>{busy ? <Spinner /> : <ScanLine size={18} />}
+        <Button type="button" className="panel-action stretch" onClick={process} disabled={!file || busy || Boolean(metadataError)}>{busy ? <Spinner /> : <ScanLine size={18} />}
           {busy ? 'Memproses…' : 'Proses video'}</Button>
       </Panel>
     </div>
@@ -79,7 +106,7 @@ export function VideoDetection() {
     }}><Download size={17} /> Unduh MP4</Button>}>
       <div className="two-columns">
         <div className="comparison-item"><header><h3>Video asli</h3></header><div className="image-preview">
-          {original && !originalError ? <video src={original} key={original} controls playsInline onError={() => setOriginalError(true)} /> :
+          {original && !originalError ? <video src={original} key={original} controls playsInline preload="metadata" onLoadedMetadata={e => readMetadata(e.currentTarget)} onError={() => setOriginalError(true)} /> :
             <Empty title={originalError ? 'Codec pratinjau tidak didukung' : 'Belum ada video'} detail={originalError ? 'Anda tetap dapat memproses video jika server mendukung codec.' : 'Pilih video untuk mulai.'} icon={<Film />} />}
         </div></div>
         <div className="comparison-item"><header><h3>Video beranotasi</h3></header><div className="image-preview">

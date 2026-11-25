@@ -259,6 +259,12 @@ td.number { font-variant-numeric: tabular-nums; }
 .info-lines > div:first-child { border-top: 0; padding-top: 0; }
 .info-lines span { color: var(--muted); }
 .info-lines strong { text-align: right; }
+.video-resize-info { margin-top: 16px; padding: 14px; border: 1px solid #b9e5dc; border-radius: 8px; background: #f0fdfa; color: var(--brand-dark); font-size: 13px; }
+.video-resize-info p { margin-bottom: 10px; line-height: 1.6; }
+.video-resize-info p:first-child { display: flex; align-items: center; gap: 8px; }
+.video-resize-info svg { flex-shrink: 0; }
+.video-resize-info .info-lines > div { border-color: #d5eee8; flex-wrap: wrap; }
+.video-resize-info .info-lines strong { overflow-wrap: anywhere; }
 .model-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
 .model-facts > div:nth-child(2) { border-top: 0; padding-top: 0; }
 .break-anywhere { overflow-wrap: anywhere; }

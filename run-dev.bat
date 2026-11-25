@@ -56,7 +56,7 @@ echo Gunakan Ctrl+C di masing-masing jendela untuk menghentikan layanan.
 exit /b 0
 
 :backend
-.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --ws-max-size 2097152
+.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --ws-max-size 2097152 --reload --reload-dir backend
 exit /b %errorlevel%
 
 :frontend

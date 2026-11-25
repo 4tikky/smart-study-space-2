@@ -33,9 +33,14 @@ export type Prediction = {
 }
 export type ImageResult = Prediction & { annotated: string; session_id: string; history_id: number }
 export type VideoFrame = Summary & { frame: number; seconds: number; playback_seconds: number; elapsed_ms: number }
+export type VideoMetadata = {
+  width: number; height: number; processing_width: number; processing_height: number
+  duration_seconds: number; resized: boolean; fps?: number; orientation?: 'landscape' | 'portrait'
+}
 export type Job = {
   id: string; status: 'queued' | 'processing' | 'completed' | 'error'; progress: number
   latest?: VideoFrame; frames: VideoFrame[]; error?: string; processed_frames?: number; sample_every?: number
+  metadata?: VideoMetadata
 }
 export type LiveFrame = Prediction & { smoothed: Summary; timestamp: string; fps: number | null; image?: string }
 export type ModelStatus = 'ready' | 'loading' | 'error'

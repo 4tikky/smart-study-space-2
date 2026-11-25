@@ -10,7 +10,7 @@ from backend.config import MAX_VIDEO_BYTES, TEMP_DIR
 from backend.database import store
 from backend.schemas import InferenceOptions
 from backend.services.model import ModelUnavailable, annotate, data_url, model
-from backend.services.video import inspect_video, jobs
+from backend.services.video import inspect_video, jobs, video_metadata
 from inference import MAX_UPLOAD_BYTES, read_image
 
 router = APIRouter(prefix="/api")
@@ -78,8 +78,9 @@ def detect_video(file: Annotated[UploadFile, File()], options: Annotated[Inferen
                 if size > MAX_VIDEO_BYTES:
                     raise HTTPException(413, "Ukuran video maksimal 150 MB.")
                 target.write(chunk)
-        capture, *_ = inspect_video(path)
+        capture, fps, count, width, height = inspect_video(path)
         capture.release()
+        jobs.update(key, metadata=video_metadata(fps, count, width, height))
         jobs.submit(key, path, sample_every, options)
         submitted = True
         return {"id": key, "status": "queued"}

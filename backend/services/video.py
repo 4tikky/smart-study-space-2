@@ -3,6 +3,7 @@ import math
 import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from pathlib import Path
 from threading import Event, Lock
 from time import time
@@ -12,13 +13,35 @@ import cv2
 import imageio_ffmpeg
 from PIL import Image
 
-from backend.config import MAX_FRAME_PIXELS, MAX_VIDEO_SECONDS, TEMP_DIR
+from backend.config import MAX_VIDEO_DIMENSION, MAX_VIDEO_FRAME_PIXELS, MAX_VIDEO_SECONDS, TEMP_DIR
 from backend.database import store
 from backend.services.model import ModelUnavailable, annotate, model
 
 log = logging.getLogger(__name__)
 TTL_SECONDS = 60 * 60
 JOB_FILE = re.compile(r"[0-9a-f]{32}\.(?:mp4|input\.(?:mp4|avi|mov))")
+
+
+def processing_size(width, height):
+    """Fit inside the orientation's processing bounds without upscaling.
+
+    Whole-pixel rounding changes the aspect ratio by at most one pixel. The
+    encoder pads an odd edge by one pixel instead of stretching the image.
+    """
+    max_width, max_height = (1920, 1080) if width >= height else (1080, 1920)
+    scale = min(1, max_width / width, max_height / height)
+    return max(1, math.floor(width * scale)), max(1, math.floor(height * scale))
+
+
+def video_metadata(fps, count, width, height):
+    target_width, target_height = processing_size(width, height)
+    return {
+        "width": width, "height": height, "fps": fps,
+        "duration_seconds": count / fps,
+        "orientation": "landscape" if width >= height else "portrait",
+        "processing_width": target_width, "processing_height": target_height,
+        "resized": (width, height) != (target_width, target_height),
+    }
 
 
 def inspect_video(path):
@@ -32,8 +55,8 @@ def inspect_video(path):
         height = capture.get(cv2.CAP_PROP_FRAME_HEIGHT)
         if not all(math.isfinite(n) and n > 0 for n in (fps, count, width, height)) or fps > 240:
             raise ValueError("Metadata frame video tidak dapat dibaca.")
-        if width * height > MAX_FRAME_PIXELS or max(width, height) > 1920:
-            raise ValueError("Resolusi video maksimal 1920 × 1080 piksel (atau 1080 × 1920).")
+        if width * height > MAX_VIDEO_FRAME_PIXELS or max(width, height) > MAX_VIDEO_DIMENSION:
+            raise ValueError("Resolusi video melebihi batas keamanan: maksimal 16.777.216 piksel per frame dan 8.192 piksel per sisi.")
         if count / fps > MAX_VIDEO_SECONDS:
             raise ValueError("Durasi video maksimal 10 menit.")
         return capture, fps, round(count), round(width), round(height)
@@ -110,11 +133,14 @@ class VideoJobs:
         try:
             self.update(key, status="processing")
             capture, fps, count, width, height = inspect_video(path)
+            metadata = video_metadata(fps, count, width, height)
+            target_width, target_height = metadata["processing_width"], metadata["processing_height"]
+            self.update(key, metadata=metadata)
             # Sample at most 1,200 frames per job. Play at the sampled cadence.
             stride = max(stride, math.ceil(count / 1200))
             encoder = subprocess.Popen([
                 imageio_ffmpeg.get_ffmpeg_exe(), "-nostats", "-loglevel", "error", "-y", "-f", "rawvideo",
-                "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps / stride), "-i", "-",
+                "-pix_fmt", "rgb24", "-s", f"{target_width}x{target_height}", "-r", str(fps / stride), "-i", "-",
                 "-an", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast",
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output),
             ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -127,6 +153,8 @@ class VideoJobs:
                     ok, bgr = capture.retrieve()
                     if not ok or bgr.shape[:2] != (height, width):
                         raise ValueError("Frame video rusak atau resolusinya berubah saat diproses.")
+                    if metadata["resized"]:
+                        bgr = cv2.resize(bgr, (target_width, target_height), interpolation=cv2.INTER_AREA)
                     image = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
                     result = model.predict(image, options)
                     encoder.stdin.write(annotate(image, result["rows"]).tobytes())
@@ -140,6 +168,8 @@ class VideoJobs:
                     self.update(key, progress=min(99, round((index + 1) / count * 100)),
                                 processed_frames=len(points), latest=points[-1])
                 index += 1
+            if index < count:
+                raise ValueError("Video terpotong atau memiliki frame yang tidak dapat dibaca. Coba unggah ulang video yang utuh.")
             encoder.stdin.close()
             if encoder.wait(timeout=60) or not points:
                 raise ValueError("Video hasil tidak dapat dikodekan atau video tidak memiliki frame yang dapat dibaca.")
@@ -148,6 +178,7 @@ class VideoJobs:
                                    sum(item["elapsed_ms"] for item in points), details={
                                        "sampled_frames": len(points), "sample_every": stride,
                                        "duration_seconds": round(index / fps, 3), "last_frame": last,
+                                       "video_metadata": metadata,
                                    })
             self.update(key, status="completed", progress=100, frames=points, sample_every=stride,
                         fps=fps, duration=round(index / fps, 3), finished=time())
@@ -155,13 +186,16 @@ class VideoJobs:
             self.update(key, status="error", error=str(exc), finished=time())
         except Exception:
             log.exception("Pemrosesan video gagal")
-            self.update(key, status="error", error="Video gagal diproses. Coba codec atau resolusi lain.", finished=time())
+            self.update(key, status="error", error="Video gagal diproses. Pastikan file tidak rusak dan gunakan codec MP4, AVI, atau MOV yang didukung.", finished=time())
         finally:
             if capture is not None:
                 capture.release()
             if encoder and encoder.poll() is None:
                 encoder.kill()
                 encoder.wait()
+            if encoder and encoder.stdin:
+                with suppress(OSError):
+                    encoder.stdin.close()
             if self.get(key)["status"] == "error":
                 output.unlink(missing_ok=True)
             path.unlink(missing_ok=True)
