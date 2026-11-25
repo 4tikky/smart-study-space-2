@@ -8,6 +8,7 @@ import { useData } from '../hooks/useData'
 import { useLive } from '../hooks/useLive'
 import type { Camera as CameraConfig } from '../types'
 import { defaults, elapsed, timeLabel } from '../utils'
+import { browserMode } from '../services/runtime'
 
 export function Live() {
   const { data: cameras, error: camerasError, refresh } = useData<CameraConfig[]>('/api/cameras')
@@ -36,6 +37,7 @@ export function Live() {
   const stateLabel = { idle: 'Offline', connecting: 'Menghubungkan', live: 'Terhubung', error: 'Terputus' }[live.status]
   return <>
     <PageTitle title="Pemantauan Langsung" description="Jalankan inferensi YOLO berulang dari webcam atau stream kamera." />
+    {browserMode && <p className="video-resize-info">Pemantauan memerlukan kamera aktif, HTTPS, dan tab browser yang terbuka. Kamera ponsel dapat dipakai langsung dari browser ponsel. RTSP/IP memerlukan media gateway HTTPS dengan codec yang didukung browser dan izin CORS.</p>}
     {camerasError && <ErrorBox message={camerasError} retry={refresh} />}
     {live.error && <ErrorBox message={live.error} />}
     <div className="workspace-grid wide-left">

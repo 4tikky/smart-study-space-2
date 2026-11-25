@@ -1,5 +1,7 @@
 # Smart Study Space
 
+Versi browser untuk **Vercel + Supabase** tersedia dalam workspace yang sama, dengan model ONNX hasil ekspor checkpoint asli, inferensi lokal WebGPU/WASM, dan login operator. Ikuti [panduan deployment dan migrasi](docs/DEPLOYMENT.md). `run-dev.bat` tetap menjalankan versi FastAPI/SQLite yang kompatibel dengan implementasi sebelumnya.
+
 Pemantauan ketersediaan kursi untuk Perpustakaan Universitas Diponegoro. Tampilan mahasiswa menampilkan ketersediaan per lantai dan zona. Ruang kerja operator menyediakan deteksi gambar, video, pemantauan kamera, konfigurasi, dan analitik.
 
 React, TypeScript, Vite, Tailwind CSS, komponen shadcn/ui berbasis Radix, Lucide, Recharts, dan Framer Motion digunakan pada frontend. Backend FastAPI menggunakan Python 3.12, Ultralytics YOLO, OpenCV, Pillow, WebSocket, dan SQLite.

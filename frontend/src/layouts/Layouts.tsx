@@ -4,6 +4,9 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Button, Logo } from '../components/ui'
 import { useData } from '../hooks/useData'
 import type { Occupancy } from '../types'
+import { browserMode } from '../services/runtime'
+import { supabase } from '../services/supabase'
+import { useAuth } from '../components/Auth'
 
 export const operatorLinks = [
   { to: '/operator', name: 'Ringkasan', icon: LayoutDashboard },
@@ -36,7 +39,7 @@ export function StudentLayout() {
         </nav>
         <div className="student-nav-actions">
           <span className={'system-status ' + (state.data ? 'system-online' : '')}><i />{state.data ? 'Sistem aktif' : state.loading ? 'Memeriksa sistem' : 'Sistem offline'}</span>
-          <Button asChild variant="outline" className="role-button"><Link to="/operator" title="Beralih ke operator · Mode demo"><SwitchCamera size={17} /><span>Mode operator</span></Link></Button>
+          <Button asChild variant="outline" className="role-button"><Link to="/operator" title={browserMode ? 'Masuk sebagai operator' : 'Beralih ke operator · Mode demo'}><SwitchCamera size={17} /><span>Mode operator</span></Link></Button>
           <Button variant="ghost" size="icon" className="student-menu" onClick={() => setMenu(!menu)} aria-label={menu ? 'Tutup menu' : 'Buka menu'} aria-expanded={menu}>{menu ? <X size={21} /> : <Menu size={21} />}</Button>
         </div>
       </div>
@@ -47,6 +50,7 @@ export function StudentLayout() {
 }
 
 export function OperatorLayout() {
+  const auth = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [mobile, setMobile] = useState(false)
   const { pathname } = useLocation()
@@ -68,7 +72,7 @@ export function OperatorLayout() {
       <header className="operator-top">
         <div><Button variant="ghost" size="icon" className="operator-menu" onClick={() => setMobile(!mobile)} aria-label="Buka navigasi" aria-expanded={mobile}><Menu size={22} /></Button>
           <span className="breadcrumb"><Activity size={16} /> Operator <ChevronRight size={14} /> <strong>{current?.name}</strong></span></div>
-        <div><span className="demo-tag" title="Mode demo lokal tanpa autentikasi">Mode demo</span>
+        <div>{browserMode ? <><span className="demo-tag" title={auth.email}>Operator terverifikasi</span><Button variant="ghost" size="small" onClick={() => { void supabase?.auth.signOut() }}>Keluar</Button></> : <span className="demo-tag" title="Mode demo lokal tanpa autentikasi">Mode demo</span>}
           <Button asChild variant="outline" className="role-button"><Link to="/"><SwitchCamera size={17} /><span>Mode mahasiswa</span><ChevronDown size={14} /></Link></Button></div>
       </header>
       <main id="main" className="operator-main"><Outlet /></main>

@@ -8,6 +8,9 @@ import { useData } from '../hooks/useData'
 import { api, download, endpoint, upload } from '../services/api'
 import type { Job, VideoMetadata } from '../types'
 import { defaults, elapsed, stamp } from '../utils'
+import { browserMode } from '../services/runtime'
+import { disposeJob } from '../services/local-jobs'
+import { processingSize } from '../services/vision/core'
 
 const jobFinished = (job: Job) => job.status === 'completed' || job.status === 'error'
 
@@ -37,6 +40,7 @@ export function VideoDetection() {
     if (!complete) return
     toast('Pemrosesan video selesai.')
   }, [complete, id, toast])
+  useEffect(() => () => { if (browserMode && id) disposeJob(id) }, [id])
 
   function choose(next: File) {
     if (!/\.(mp4|avi|mov)$/i.test(next.name) || !next.size || next.size > 150 * 1024 * 1024) {
@@ -49,9 +53,7 @@ export function VideoDetection() {
   function readMetadata(video: HTMLVideoElement) {
     const { videoWidth: width, videoHeight: height, duration } = video
     if (!width || !height || !Number.isFinite(duration) || duration <= 0) return
-    const scale = Math.min(1, (width >= height ? 1920 : 1080) / width, (width >= height ? 1080 : 1920) / height)
-    const processing_width = Math.max(1, Math.floor(width * scale))
-    const processing_height = Math.max(1, Math.floor(height * scale))
+    const [processing_width, processing_height] = processingSize(width, height)
     setPreviewMetadata({ width, height, duration_seconds: duration, processing_width, processing_height,
       resized: width !== processing_width || height !== processing_height })
   }
@@ -70,6 +72,8 @@ export function VideoDetection() {
   return <>
     <PageTitle title="Deteksi Video" description="Analisis perubahan ketersediaan kursi dari frame video." />
     {(error || metadataError || jobError || job?.error) && <ErrorBox message={error || metadataError || jobError || job?.error || ''} retry={jobError ? refresh : undefined} />}
+    {job?.persistence_warning && <ErrorBox message={job.persistence_warning} />}
+    {browserMode && <p className="muted">Video diproses di perangkat ini. Biarkan tab tetap terbuka sampai selesai. Codec bergantung pada dukungan browser.</p>}
     <div className="workspace-grid">
       <Panel title="Video masukan"><FileDrop kind="video" file={file} choose={choose} disabled={busy} />
         <div className="video-resize-info" role="status">
@@ -92,22 +96,23 @@ export function VideoDetection() {
           {busy ? 'Memproses…' : 'Proses video'}</Button>
       </Panel>
     </div>
-    {busy && <Panel title={uploading ? 'Mengunggah video' : job?.status === 'queued' ? 'Menunggu antrean' : 'Menganalisis frame'}>
+    {busy && <Panel title={uploading ? (browserMode ? 'Membaca metadata video' : 'Mengunggah video') : job?.status === 'queued' ? 'Menyiapkan model' : 'Menganalisis frame'}>
       <progress value={job?.progress || 0} max={100} aria-label="Progres pemrosesan video" /><p className="muted">{job?.progress || 0}% · {job?.processed_frames || 0} frame dianalisis</p>
     </Panel>}
     <Panel title="Pratinjau dan hasil" action={complete && <Button variant="outline" onClick={async () => {
       try {
+        if (browserMode) { download(output, 'deteksi-video.' + (job?.output_format || 'mp4')); return }
         const response = await fetch(output)
         if (!response.ok) throw new Error()
         const url = URL.createObjectURL(await response.blob())
-        download(url, 'deteksi-video.mp4')
+        download(url, 'deteksi-video.' + (job?.output_format || 'mp4'))
         setTimeout(() => URL.revokeObjectURL(url), 5000)
       } catch { setError('Video hasil tidak dapat diunduh. Coba proses ulang.') }
-    }}><Download size={17} /> Unduh MP4</Button>}>
+    }}><Download size={17} /> Unduh {(job?.output_format || 'mp4').toUpperCase()}</Button>}>
       <div className="two-columns">
         <div className="comparison-item"><header><h3>Video asli</h3></header><div className="image-preview">
           {original && !originalError ? <video src={original} key={original} controls playsInline preload="metadata" onLoadedMetadata={e => readMetadata(e.currentTarget)} onError={() => setOriginalError(true)} /> :
-            <Empty title={originalError ? 'Codec pratinjau tidak didukung' : 'Belum ada video'} detail={originalError ? 'Anda tetap dapat memproses video jika server mendukung codec.' : 'Pilih video untuk mulai.'} icon={<Film />} />}
+            <Empty title={originalError ? 'Codec pratinjau tidak didukung' : 'Belum ada video'} detail={originalError ? (browserMode ? 'Coba MP4 H.264 atau browser lain yang mendukung codec video ini.' : 'Anda tetap dapat memproses video jika server mendukung codec.') : 'Pilih video untuk mulai.'} icon={<Film />} />}
         </div></div>
         <div className="comparison-item"><header><h3>Video beranotasi</h3></header><div className="image-preview">
           {output ? <video src={output} key={output} controls playsInline onTimeUpdate={e => setSeconds(e.currentTarget.currentTime)} onSeeked={e => setSeconds(e.currentTarget.currentTime)} /> :

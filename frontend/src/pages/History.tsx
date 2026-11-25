@@ -4,7 +4,8 @@ import { DetectionTable } from '../components/Detection'
 import { Metrics } from '../components/Occupancy'
 import { Button, Empty, ErrorBox, Field, Modal, PageTitle, Panel, Skeleton, useToast } from '../components/ui'
 import { useData } from '../hooks/useData'
-import { download, endpoint } from '../services/api'
+import { api, download, downloadText, endpoint } from '../services/api'
+import { browserMode } from '../services/runtime'
 import type { Configuration, Detection, HistoryRecord } from '../types'
 import { dateLabel, elapsed, pct, sourceLabel, stamp } from '../utils'
 
@@ -31,13 +32,17 @@ export function History() {
   async function exportRecords() {
     setExporting(true)
     try {
+      if (browserMode) {
+        downloadText(await api<string>('/api/history/export?' + query), 'study-space-history.csv', 'text/csv;charset=utf-8')
+        toast('CSV riwayat siap diunduh.'); return
+      }
       const response = await fetch(endpoint('/api/history/export?' + query))
       if (!response.ok) throw new Error()
       const url = URL.createObjectURL(await response.blob())
       download(url, 'study-space-history.csv')
       setTimeout(() => URL.revokeObjectURL(url), 5000)
       toast('CSV riwayat siap diunduh.')
-    } catch { toast('Ekspor gagal. Periksa koneksi backend.', true) }
+    } catch (error) { toast((error as Error).message || 'Ekspor gagal. Periksa koneksi data.', true) }
     finally { setExporting(false) }
   }
 

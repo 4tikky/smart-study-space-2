@@ -60,6 +60,7 @@ exit /b 0
 exit /b %errorlevel%
 
 :frontend
+set VITE_RUNTIME=legacy
 call npm --prefix frontend run dev -- --strictPort
 exit /b %errorlevel%
 

@@ -263,6 +263,8 @@ td.number { font-variant-numeric: tabular-nums; }
 .video-resize-info p { margin-bottom: 10px; line-height: 1.6; }
 .video-resize-info p:first-child { display: flex; align-items: center; gap: 8px; }
 .video-resize-info svg { flex-shrink: 0; }
+.auth-page { max-width: 480px; padding-block: 48px; }
+.auth-page > a { display: block; margin-bottom: 28px; }
 .video-resize-info .info-lines > div { border-color: #d5eee8; flex-wrap: wrap; }
 .video-resize-info .info-lines strong { overflow-wrap: anywhere; }
 .model-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }

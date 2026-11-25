@@ -4,6 +4,7 @@ import { Button, Empty, ErrorBox, Field, Modal, PageTitle, Panel, Skeleton, Spin
 import { useData } from '../hooks/useData'
 import { api, json } from '../services/api'
 import type { Camera as CameraConfig, Configuration, FloorConfig, Settings as Preferences, ZoneConfig } from '../types'
+import { browserMode } from '../services/runtime'
 
 type FloorDraft = Omit<FloorConfig, 'id'> & { id?: number }
 type ZoneDraft = Omit<ZoneConfig, 'id'> & { id?: number }
@@ -157,7 +158,7 @@ export function Settings() {
           <Field label="Tipe kamera"><select value={editor.value.kind} onChange={e => setEditor({ ...editor, value: {
             ...editor.value, kind: e.target.value as CameraDraft['kind'], stream_url: '',
           } })}><option value="browser">Webcam browser / USB</option><option value="stream">Kamera IP / RTSP</option></select></Field>
-          {editor.value.kind === 'stream' && <Field label="URL stream" help={editor.value.id ? 'Kosongkan untuk mempertahankan URL tersimpan.' : 'RTSP, RTSPS, atau HTTP(S).'}><input
+          {editor.value.kind === 'stream' && <Field label={browserMode ? 'URL media gateway' : 'URL stream'} help={browserMode ? 'Browser memerlukan gateway HTTPS dengan codec yang didukung dan izin CORS. Kosongkan saat mengedit untuk mempertahankan URL.' : editor.value.id ? 'Kosongkan untuk mempertahankan URL tersimpan.' : 'RTSP, RTSPS, atau HTTP(S).'}><input
             type="password" autoComplete="off" required={!editor.value.id} maxLength={2048} value={editor.value.stream_url}
             onChange={e => setEditor({ ...editor, value: { ...editor.value, stream_url: e.target.value } })} /></Field>}
           <Field label="Zona"><select value={editor.value.zone_id ?? ''} onChange={e => setEditor({ ...editor, value: {

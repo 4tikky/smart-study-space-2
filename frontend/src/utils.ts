@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import type { Availability, InferenceOptions } from './types'
+import { browserMode } from './services/runtime'
 
 export function cn(...values: ClassValue[]) { return twMerge(clsx(values)) }
 
@@ -17,7 +18,7 @@ export const statusLabel: Record<Availability, string> = {
   plenty: 'Banyak kursi tersedia', limited: 'Kursi terbatas', full: 'Hampir penuh', unavailable: 'Pemantauan belum tersedia',
 }
 export const sourceLabel = { image: 'Gambar', video: 'Video', live: 'Pemantauan langsung' }
-export const defaults: InferenceOptions = { confidence: 0.25, resolution: 640, device: 'cpu' }
+export const defaults: InferenceOptions = { confidence: 0.25, resolution: 640, device: browserMode ? 'auto' : 'cpu' }
 
 export function dayRange(days: number) {
   const offset = new Date(Date.now() + 7 * 3600 * 1000)

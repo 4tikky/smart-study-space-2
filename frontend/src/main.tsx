@@ -6,6 +6,7 @@ import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
 import { Button, Empty, Panel, Skeleton, ToastProvider } from './components/ui'
 import { OperatorLayout, StudentLayout } from './layouts/Layouts'
 import { Student, FloorDetail } from './pages/Student'
+import { AuthProvider, Login, RequireOperator } from './components/Auth'
 const Overview = lazy(() => import('./pages/Overview').then(module => ({ default: module.Overview })))
 const ImageDetection = lazy(() => import('./pages/ImageDetection').then(module => ({ default: module.ImageDetection })))
 const VideoDetection = lazy(() => import('./pages/VideoDetection').then(module => ({ default: module.VideoDetection })))
@@ -16,14 +17,15 @@ const Model = lazy(() => import('./pages/Model').then(module => ({ default: modu
 const Settings = lazy(() => import('./pages/Settings').then(module => ({ default: module.Settings })))
 
 createRoot(document.getElementById('root')!).render(
-  <ToastProvider><BrowserRouter><Suspense fallback={<div className="wrap route-loading"><Skeleton className="floor-skeleton" /></div>}><Routes>
+  <ToastProvider><AuthProvider><BrowserRouter><Suspense fallback={<div className="wrap route-loading"><Skeleton className="floor-skeleton" /></div>}><Routes>
+    <Route path="masuk" element={<Login />} />
     <Route element={<StudentLayout />}>
       <Route index element={<Student />} />
       <Route path="lantai/:id" element={<FloorDetail />} />
       <Route path="*" element={<Panel><Empty title="Halaman tidak ditemukan" detail="Kembali ke beranda untuk memilih lantai."
         action={<Button asChild><Link to="/">Ke beranda</Link></Button>} /></Panel>} />
     </Route>
-    <Route path="operator" element={<OperatorLayout />}>
+    <Route element={<RequireOperator />}><Route path="operator" element={<OperatorLayout />}>
       <Route index element={<Overview />} />
       <Route path="live" element={<Live />} />
       <Route path="image" element={<ImageDetection />} />
@@ -32,6 +34,6 @@ createRoot(document.getElementById('root')!).render(
       <Route path="analytics" element={<Analytics />} />
       <Route path="model" element={<Model />} />
       <Route path="settings" element={<Settings />} />
-    </Route>
-  </Routes></Suspense></BrowserRouter></ToastProvider>,
+    </Route></Route>
+  </Routes></Suspense></BrowserRouter></AuthProvider></ToastProvider>,
 )

@@ -50,6 +50,7 @@ export function ImageDetection() {
   return <>
     <PageTitle title="Deteksi Gambar" description="Analisis foto area belajar untuk menemukan kursi kosong dan terisi." />
     {error && <ErrorBox message={error} />}
+    {result?.persistence_warning && <ErrorBox message={result.persistence_warning} />}
     <div className="workspace-grid">
       <Panel title="Gambar masukan"><FileDrop kind="image" file={file} choose={choose} disabled={busy} /></Panel>
       <Panel title="Pengaturan deteksi"><InferenceFields options={options} set={setOptions} disabled={busy} />

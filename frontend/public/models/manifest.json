@@ -1,0 +1,40 @@
+{
+  "architecture": "YOLO26s",
+  "file": "yolo26s.onnx",
+  "source_sha256": "b89d33c0d78597842cf086d456d17d75930cc619116dfed242cdd61c0d9f4097",
+  "sha256": "5ccb466893614688837e6c396af5c9b7dd30ac57b170dd401c413e4924ff1bd1",
+  "bytes": 37984115,
+  "opset": 17,
+  "input": {
+    "name": "images",
+    "layout": "NCHW",
+    "dtype": "float32",
+    "normalization": "RGB / 255",
+    "padding": 114,
+    "stride": 32,
+    "rectangular_letterbox": true
+  },
+  "output": {
+    "name": "output0",
+    "shape_observed": [
+      1,
+      300,
+      6
+    ],
+    "columns": [
+      "x1",
+      "y1",
+      "x2",
+      "y2",
+      "confidence",
+      "class_id"
+    ],
+    "end_to_end": true,
+    "nms_required": false
+  },
+  "classes": {
+    "0": "EmptyChair",
+    "1": "OccupiedChair"
+  },
+  "validated": true
+}

@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .cache/
+.local/
 
 # Hasil proses dan log
 runs/
@@ -27,4 +28,8 @@ Desktop.ini
 # Build frontend serta penyimpanan lokal FastAPI
 frontend/node_modules/
 frontend/dist/
+frontend/public/ort/
+frontend/test-results/
+frontend/playwright-report/
+frontend/tests/fixtures/
 backend/data/

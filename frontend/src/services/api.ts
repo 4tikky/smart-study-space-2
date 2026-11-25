@@ -1,7 +1,9 @@
 import type { InferenceOptions } from '../types'
+import { browserMode } from './runtime'
+import { localVideoUrl } from './local-jobs'
 
 const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
-export const endpoint = (path: string) => base + path
+export const endpoint = (path: string) => browserMode ? localVideoUrl(path) || path : base + path
 
 export function liveUrl() {
   const url = new URL(endpoint('/ws/live-detection'), location.origin)
@@ -10,6 +12,7 @@ export function liveUrl() {
 }
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
+  if (browserMode) return await (await import('./cloud-api')).cloudApi(path, options) as T
   let response: Response
   try {
     response = await fetch(endpoint(path), { cache: 'no-store', ...options })

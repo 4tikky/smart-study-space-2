@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { Detection, InferenceOptions } from '../types'
 import { pct } from '../utils'
 import { Button, Field, Modal } from './ui'
+import { browserMode } from '../services/runtime'
 
 export function FileDrop({ kind, file, choose, disabled }: {
   kind: 'image' | 'video'; file: File | null; choose: (file: File) => void; disabled?: boolean
@@ -49,7 +50,7 @@ export function InferenceFields({ options, set, disabled }: {
         {[320, 480, 640, 800, 960].map(size => <option key={size} value={size}>{size} px</option>)}
       </select></Field>
       <Field label="Perangkat"><select value={options.device} disabled={disabled} onChange={e => set({ ...options, device: e.target.value as InferenceOptions['device'] })}>
-        <option value="cpu">CPU</option><option value="auto">Otomatis</option>
+        <option value="cpu">{browserMode ? 'CPU · WebAssembly' : 'CPU'}</option><option value="auto">{browserMode ? 'Otomatis · WebGPU / WebAssembly' : 'Otomatis'}</option>
       </select></Field>
     </div>
   </>
