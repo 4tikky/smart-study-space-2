@@ -1,0 +1,30 @@
+# Environment Python dan cache lokal
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.cache/
+
+# Hasil proses dan log
+runs/
+*.log
+
+# Rahasia lokal; contoh konfigurasi boleh disimpan
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# File sistem operasi
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# weights.pt sengaja ikut repo agar demo bisa dijalankan setelah clone.
+
+# Build frontend serta penyimpanan lokal FastAPI
+frontend/node_modules/
+frontend/dist/
+backend/data/
