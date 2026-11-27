@@ -42,8 +42,8 @@ export function Student() {
         </div>
         {data && !data.summary && <span className="hero-data-state"><i /> Belum ada kamera aktif</span>}
       </div>
-      <div className="hero-image"><img src="/library-study-room.webp" alt="" fetchPriority="high" />
-        <span className="photo-caption"><BookMark /> Ilustrasi ruang belajar</span></div>
+      <div className="hero-image"><img src="/foto-ruang-belajar.jpg" alt="Pengunjung belajar di meja panjang perpustakaan" fetchPriority="high" />
+        <span className="photo-caption"><BookMark /> Ruang belajar perpustakaan</span></div>
     </section>
     {error && <ErrorBox message={error} retry={refresh} />}
     <div className="student-metrics">{loading ? <Skeleton className="metrics-skeleton" /> : <Metrics summary={data?.summary} />}</div>
